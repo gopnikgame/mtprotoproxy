@@ -1,34 +1,253 @@
-# Async MTProto Proxy #
+# MTProto Proxy для Remnawave !Только для моего скрипта настройки ноды!
 
-Fast and simple to setup MTProto proxy written in Python.
+🚀 **Полностью автоматическая настройка MTProto прокси-сервера для Remnawave через Nginx**
 
-## Starting Up ##
-    
-1. `git clone -b stable https://github.com/alexbers/mtprotoproxy.git; cd mtprotoproxy`
-2. *(optional, recommended)* edit *config.py*, set **PORT**, **USERS** and **AD_TAG**
-3. `docker-compose up -d` (or just `python3 mtprotoproxy.py` if you don't like Docker)
-4. *(optional, get a link to share the proxy)* `docker-compose logs`
+[![GitHub](https://img.shields.io/badge/GitHub-gopnikgame/mtprotoproxy-blue)](https://github.com/gopnikgame/mtprotoproxy)
+[![Upstream](https://img.shields.io/badge/Upstream-alexbers/mtprotoproxy-green)](https://github.com/alexbers/mtprotoproxy)
 
-![Demo](https://alexbers.com/mtprotoproxy/install_demo_v2.gif)
+## ⚡ Установка в одну команду
 
-## Channel Advertising ##
+```bash
+wget -O - https://raw.githubusercontent.com/gopnikgame/mtprotoproxy/master/install.sh | sudo bash
+```
 
-To advertise a channel get a tag from **@MTProxybot** and put it to *config.py*.
+**После установки запускайте просто командой:**
 
-## Performance ##
+```bash
+MTProto
+```
 
-The proxy performance should be enough to comfortably serve about 4 000 simultaneous users on
-the VDS instance with 1 CPU core and 1024MB RAM.
+**После завершения настройки вы получите полностью рабочий прокси-сервер и ссылку для подключения!**
 
-## More Instructions ##
+## 🎯 Что делает скрипт
 
-- [Running without Docker](https://github.com/alexbers/mtprotoproxy/wiki/Running-Without-Docker)
-- [Optimization and fine tuning](https://github.com/alexbers/mtprotoproxy/wiki/Optimization-and-Fine-Tuning)
+- ✅ **Полная автоматизация** - от начала до конца без ручных действий
+- ✅ **Автоматический SSL** - получает сертификат Let's Encrypt для вашего домена
+- ✅ **Умная настройка** - сохраняет все существующие домены и конфигурации
+- ✅ **Запуск сервисов** - автоматически запускает все Docker контейнеры
+- ✅ **Готовая ссылка** - выдает рабочую ссылку для подключения к прокси
+- ✅ **Безопасность** - все изменения сохраняются в .backup файлы
 
-## Advanced Usage ##
+## 🚀 Варианты установки
 
-The proxy can be launched:
-- with a custom config: `python3 mtprotoproxy.py [configfile]`
-- several times, clients will be automaticaly balanced between instances
-- with uvloop module to get an extra speed boost
-- with runtime statistics exported to [Prometheus](https://prometheus.io/)
+### Вариант 1: Автоустановка через команду (рекомендуется)
+
+```bash
+# 1. Установка
+wget -O - https://raw.githubusercontent.com/gopnikgame/mtprotoproxy/master/install.sh | sudo bash
+
+# 2. Настройка (просто одна команда!)
+MTProto
+
+# Выберите опцию 2 (Настроить MTProto Proxy)
+```
+
+### Вариант 2: Быстрая настройка одной командой
+
+```bash
+wget https://raw.githubusercontent.com/gopnikgame/mtprotoproxy/master/manage_mtproto.sh
+chmod +x manage_mtproto.sh
+sudo ./manage_mtproto.sh setup
+```
+
+### Вариант 3: Ручная установка
+
+```bash
+sudo git clone https://github.com/gopnikgame/mtprotoproxy /opt/MTProto_Proxy
+cd /opt/MTProto_Proxy
+sudo python3 setup_mtproto_nginx.py --interactive
+```
+
+### Вариант 4: Из конфигурационного файла
+
+```bash
+cd /opt/MTProto_Proxy
+sudo python3 setup_mtproto_nginx.py --config config_example.json
+```
+
+## 📋 Требования
+
+- Ubuntu/Debian сервер с root доступом
+- Установленная нода Remnawave в `/opt/remnanode/`
+- Docker и Docker Compose
+- Python 3.6+
+- Домен с A-записью, указывающей на ваш сервер
+
+## 📊 Что происходит при установке
+
+1. **Анализ системы** - проверка Remnawave, портов и конфигураций
+2. **Настройка конфигураций** - создание и обновление всех необходимых файлов
+3. **Получение SSL** - автоматическое получение Let's Encrypt сертификата
+4. **Запуск сервисов** - перезапуск Docker контейнеров с новой конфигурацией
+5. **Готово!** - вывод ссылки для подключения и инструкций
+
+### Пример вывода после установки:
+
+```
+============================================================
+✅ УСТАНОВКА ЗАВЕРШЕНА УСПЕШНО!
+============================================================
+
+📋 КОНФИГУРАЦИЯ:
+   Домен:           proxy.example.com
+   Порт (внешний):  443
+   Порт (прокси):   8888
+   Секрет:          abcdef0123456789abcdef0123456789
+   TLS маскировка:  www.google.com
+
+🔗 ССЫЛКА ДЛЯ ПОДКЛЮЧЕНИЯ:
+============================================================
+https://t.me/proxy?server=proxy.example.com&port=443&secret=ee...
+============================================================
+
+💡 ИНСТРУКЦИЯ ПО ПОДКЛЮЧЕНИЮ:
+   1. Откройте ссылку на устройстве с Telegram
+   2. Нажмите 'Connect Proxy' или 'Подключить прокси'
+   3. Прокси автоматически добавится в настройки
+
+📊 МОНИТОРИНГ:
+   Логи MTProto:  docker logs -f mtprotoproxy
+   Логи Nginx:    docker logs -f remnawave-nginx
+   Статус:        docker ps | grep -E 'mtprotoproxy|remnawave'
+```
+
+## 🏗️ Архитектура
+
+```
+Интернет (443) → Remnawave Nginx (SNI Router) → MTProto Backend (10443) 
+                                                → MTProto Container (8888) 
+                                                → Telegram
+```
+
+**Два отдельных Docker проекта:**
+- **Remnawave** (`/opt/remnanode/`) - Nginx с SNI роутингом
+  - Команда: `docker compose` (новая версия)
+  - Контейнер: `remnawave-nginx`
+
+- **MTProto Proxy** (`/opt/MTProto_Proxy/`) - прокси-сервер
+  - Команда: `docker-compose` (старая версия)
+  - Контейнер: `mtprotoproxy`
+  - Режим: `network_mode: host` для связи с Nginx
+
+**Связь:** Оба используют `network_mode: host`, общаются через `127.0.0.1`
+
+## 🛠️ Управление
+
+### Через команду MTProto (самый простой способ)
+
+```bash
+# Запуск меню управления
+MTProto
+
+# Или напрямую с командами
+MTProto setup       # Автоматическая настройка
+MTProto start       # Запустить контейнеры
+MTProto cert        # Получить SSL сертификат
+MTProto renew-certs # Обновить сертификаты
+```
+
+### Через Docker напрямую
+
+```bash
+# MTProto Proxy контейнер
+cd /opt/MTProto_Proxy
+docker-compose ps
+docker-compose logs -f mtprotoproxy
+docker-compose restart
+
+# Remnawave контейнеры (Nginx)
+cd /opt/remnanode
+docker compose ps
+docker compose logs -f remnawave-nginx
+docker compose restart
+
+# Статус всех контейнеров
+docker ps | grep -E "mtprotoproxy|remnawave"
+```
+
+## 📊 Мониторинг
+
+Логи контейнеров:
+- **MTProto:** `docker-compose -f /opt/MTProto_Proxy/docker-compose.yml logs -f`
+- **Nginx:** `docker compose -f /opt/remnanode/docker-compose.yml logs -f remnawave-nginx`
+
+Файлы конфигурации:
+- MTProto: `/opt/MTProto_Proxy/config.py`
+- Nginx: `/opt/remnanode/stream.conf`, `/opt/remnanode/sites-available/`
+
+## 📝 Файлы и директории
+
+```
+/opt/MTProto_Proxy/          # MTProto Proxy проект
+├── docker-compose.yml       # Docker конфигурация MTProto
+├── setup_mtproto_nginx.py   # Скрипт установки
+├── manage_mtproto.sh        # Менеджер управления
+├── config.py                # Конфигурация MTProto
+├── Dockerfile               # Docker образ
+├── mtprotoproxy.py          # Основной скрипт прокси
+├── pyaes/                   # Библиотека шифрования
+└── proxy_link.txt           # Сохраненная ссылка
+
+/opt/remnanode/              # Remnawave нода
+├── docker-compose.yml       # Docker конфигурация Nginx (НЕ ТРОГАЕМ!)
+├── stream.conf              # SNI роутинг (обновляется)
+└── sites-available/         # Nginx конфиги доменов (обновляются)
+```
+
+## 🆘 Решение проблем
+
+**Прокси не запускается:**
+```bash
+# Проверить логи
+docker logs mtprotoproxy
+
+# Проверить порты
+netstat -tulpn | grep -E "443|8888|10443"
+```
+
+**Не получается SSL сертификат:**
+```bash
+# Проверить DNS
+dig +short ваш-домен.com
+
+# Получить вручную
+sudo certbot certonly --standalone -d ваш-домен.com
+cd /opt/remnanode && docker compose up -d
+```
+
+**Контейнеры не стартуют:**
+```bash
+# MTProto Proxy
+cd /opt/MTProto_Proxy
+docker-compose down
+docker-compose up -d --build
+
+# Remnawave
+cd /opt/remnanode
+docker compose down
+docker compose up -d
+```
+
+## 🆘 Поддержка
+
+- **GitHub Issues**: https://github.com/gopnikgame/mtprotoproxy/issues
+- **Upstream**: https://github.com/alexbers/mtprotoproxy
+
+## 📚 Дополнительная документация
+
+- [Визуализация архитектуры](VISUALIZATION.md) - подробные диаграммы
+
+## 📝 Лицензия
+
+Распространяется под той же лицензией что и оригинальный mtprotoproxy.
+
+## 🙏 Благодарности
+
+- [alexbers/mtprotoproxy](https://github.com/alexbers/mtprotoproxy) - оригинальный MTProto прокси
+- [remnawave](https://github.com/remnawave) - нода для VPN сервисов
+
+---
+
+**Made with ❤️ by gopnikgame**
+
+https://github.com/gopnikgame/mtprotoproxy

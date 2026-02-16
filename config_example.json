@@ -1,0 +1,19 @@
+{
+  "mtproto_domain": "proxy.example.com",
+  "mtproto_proxy_port": 8888,
+  "mtproto_backend_port": 10443,
+  "tls_domain": "www.google.com",
+  "mtproto_secret": "00000000000000000000000000000001",
+  "ad_tag": "",
+
+  "_comments": {
+    "mtproto_domain": "Домен для MTProto прокси (требуется SSL сертификат)",
+    "mtproto_proxy_port": "Порт на котором слушает MTProto контейнер (127.0.0.1:8888)",
+    "mtproto_backend_port": "Backend порт Nginx для MTProto домена (127.0.0.1:10443)",
+    "tls_domain": "Домен для TLS маскировки (плохие клиенты перенаправляются сюда)",
+    "mtproto_secret": "Секрет для подключения (32 hex символа, генерируется автоматически)",
+    "ad_tag": "TAG от @MTProxybot для рекламы (необязательно)",
+    "architecture": "Архитектура: Internet:443 → nginx → stream.conf (SNI) → 127.0.0.1:10443 → nginx server block → 127.0.0.1:8888 → mtprotoproxy"
+  }
+}
+
