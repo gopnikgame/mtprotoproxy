@@ -102,11 +102,46 @@ if [ -d "$INSTALL_DIR" ]; then
     print_warning "Директория $INSTALL_DIR уже существует"
     print_warning "Обновление из репозитория..."
     cd "$INSTALL_DIR"
-    git pull origin master
+
+    # Проверяем наличие локальных изменений
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        print_warning "Обнаружены локальные изменения в файлах"
+
+        # Создаем backup локальных изменений
+        BACKUP_DIR="/opt/MTProto_Proxy_backup_$(date +%Y%m%d_%H%M%S)"
+        print_warning "Создание резервной копии в: $BACKUP_DIR"
+
+        # Копируем измененные файлы
+        mkdir -p "$BACKUP_DIR"
+        git diff --name-only HEAD | while read file; do
+            if [ -f "$file" ]; then
+                mkdir -p "$BACKUP_DIR/$(dirname "$file")"
+                cp "$file" "$BACKUP_DIR/$file"
+            fi
+        done
+
+        # Показываем какие файлы были изменены
+        echo "Измененные файлы (сохранены в backup):"
+        git diff --name-only HEAD | sed 's/^/  - /'
+
+        print_success "Резервная копия создана: $BACKUP_DIR"
+
+        # Сбрасываем локальные изменения
+        print_warning "Сброс локальных изменений..."
+        git reset --hard HEAD
+    fi
+
+    # Обновляем из репозитория
+    print_warning "Загрузка обновлений..."
+    git fetch origin master
+    git reset --hard origin/master
+
+    print_success "Репозиторий обновлен до последней версии"
 else
     print_warning "Клонирование репозитория..."
     git clone "$REPO_URL" "$INSTALL_DIR"
     chmod -R 755 "$INSTALL_DIR"
+    print_success "Репозиторий клонирован"
 fi
 print_success "Репозиторий готов"
 
@@ -158,14 +193,30 @@ echo "   cd $INSTALL_DIR"
 echo "   sudo python3 setup_mtproto_nginx.py --interactive"
 echo
 echo "   Скрипт автоматически:"
-echo "   ✓ Получит SSL сертификат"
+echo "   ✓ Обнаружит существующую настройку (если есть)"
+echo "   ✓ Предложит варианты действий"
+echo "   ✓ Получит SSL сертификат (если нужно)"
 echo "   ✓ Настроит конфигурации"
 echo "   ✓ Запустит все контейнеры"
 echo "   ✓ Выдаст готовую ссылку для подключения"
 echo
 echo "Документация:"
-echo "  - USAGE_EXAMPLE.md - Пример использования"
+echo "  - SMART_DETECTION.md - Умная проверка существующей настройки"
+echo "  - EXAMPLE_USAGE.md - Примеры использования"
 echo "  - ARCHITECTURE.md - Архитектура проектов"
 echo "  - README.md - Общая информация"
 echo
+
+# Показываем информацию о backup если была создана
+if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
+    echo
+    print_header "Резервная копия локальных изменений"
+    echo "Ваши локальные изменения сохранены в:"
+    echo "  $BACKUP_DIR"
+    echo
+    echo "Если нужно восстановить измененные файлы:"
+    echo "  cp -r $BACKUP_DIR/* $INSTALL_DIR/"
+    echo
+fi
+
 print_success "Готово! Удачной настройки!"
