@@ -154,7 +154,189 @@ class MTProtoNginxSetup:
             print(f"⚠ Ошибка при парсинге 80.conf: {e}")
 
         return existing_domains
-    
+
+    def parse_existing_mtproto_config(self):
+        """Парсинг существующего config.py для извлечения параметров MTProto"""
+        config_path = self.base_path / "config.py"
+        mtproto_config = {}
+
+        if not config_path.exists():
+            return mtproto_config
+
+        try:
+            with open(config_path, 'r') as f:
+                content = f.read()
+
+            # Извлекаем PORT
+            port_match = re.search(r'PORT\s*=\s*(\d+)', content)
+            if port_match:
+                mtproto_config['port'] = int(port_match.group(1))
+
+            # Извлекаем SECRET из USERS
+            secret_match = re.search(r'"tg"\s*:\s*"([a-fA-F0-9]{32})"', content)
+            if secret_match:
+                mtproto_config['secret'] = secret_match.group(1)
+
+            # Извлекаем TLS_DOMAIN
+            tls_match = re.search(r'TLS_DOMAIN\s*=\s*"([^"]+)"', content)
+            if tls_match:
+                mtproto_config['tls_domain'] = tls_match.group(1)
+
+            # Извлекаем AD_TAG
+            ad_match = re.search(r'AD_TAG\s*=\s*"([^"]*)"', content)
+            if ad_match:
+                mtproto_config['ad_tag'] = ad_match.group(1)
+
+            # Проверяем режимы
+            tls_mode_match = re.search(r'"tls"\s*:\s*(True|False)', content)
+            if tls_mode_match:
+                mtproto_config['tls_mode'] = tls_mode_match.group(1) == 'True'
+
+        except Exception as e:
+            print(f"⚠ Ошибка при парсинге config.py: {e}")
+
+        return mtproto_config
+
+    def parse_backend_port_from_stream_conf(self):
+        """Извлекает backend порт для mtproto_backend из stream.conf"""
+        stream_conf_path = self.remnawave_path / "stream.conf"
+
+        if not stream_conf_path.exists():
+            return None
+
+        try:
+            with open(stream_conf_path, 'r') as f:
+                content = f.read()
+
+            # Ищем upstream mtproto_backend
+            pattern = r'upstream\s+mtproto_backend\s*\{[^}]*server\s+127\.0\.0\.1:(\d+)'
+            match = re.search(pattern, content, re.DOTALL)
+
+            if match:
+                return int(match.group(1))
+        except Exception as e:
+            print(f"⚠ Ошибка при парсинге backend порта: {e}")
+
+        return None
+
+    def detect_existing_mtproto_setup(self):
+        """Определяет существующую настройку MTProto (домен из stream.conf + config.py)"""
+        existing_domains, existing_upstreams, _ = self.parse_existing_stream_conf()
+
+        # Ищем домен с mtproto_backend
+        mtproto_domain = None
+        for domain, backend in existing_upstreams.items():
+            if backend == 'mtproto_backend':
+                mtproto_domain = domain
+                break
+
+        if not mtproto_domain:
+            return None, None
+
+        # Парсим config.py
+        mtproto_config = self.parse_existing_mtproto_config()
+
+        # Парсим backend порт из stream.conf
+        backend_port = self.parse_backend_port_from_stream_conf()
+        if backend_port:
+            mtproto_config['backend_port'] = backend_port
+
+        return mtproto_domain, mtproto_config
+
+    def show_current_mtproto_config(self, domain, config_data):
+        """Вывод текущей конфигурации MTProto"""
+        print("\n" + "="*60)
+        print("📋 НАЙДЕНА СУЩЕСТВУЮЩАЯ НАСТРОЙКА MTPROTO")
+        print("="*60 + "\n")
+
+        print(f"🌐 Домен:           {domain}")
+
+        if config_data:
+            if 'port' in config_data:
+                print(f"🔌 Порт (прокси):   {config_data['port']}")
+            else:
+                print(f"⚠  Порт (прокси):   НЕ НАСТРОЕН")
+
+            if 'backend_port' in config_data:
+                print(f"🔌 Порт (backend):  {config_data['backend_port']}")
+            else:
+                print(f"⚠  Порт (backend):  НЕ НАСТРОЕН")
+
+            if 'secret' in config_data:
+                print(f"🔑 Секрет:          {config_data['secret']}")
+            else:
+                print(f"⚠  Секрет:          НЕ НАСТРОЕН")
+
+            if 'tls_domain' in config_data:
+                print(f"🎭 TLS маскировка:  {config_data['tls_domain']}")
+            else:
+                print(f"⚠  TLS маскировка:  НЕ НАСТРОЕНА")
+
+            if 'ad_tag' in config_data and config_data['ad_tag']:
+                print(f"📢 AD Tag:          {config_data['ad_tag']}")
+            else:
+                print(f"ℹ️  AD Tag:          не установлен")
+
+            if 'tls_mode' in config_data:
+                mode_status = "✓ Включен" if config_data['tls_mode'] else "✗ Выключен"
+                print(f"🔒 TLS режим:       {mode_status}")
+        else:
+            print("⚠  config.py не найден или пуст")
+
+        # Проверка SSL сертификата
+        cert_path = Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
+        if cert_path.exists():
+            print(f"✓ SSL сертификат:  установлен")
+        else:
+            print(f"⚠  SSL сертификат:  НЕ УСТАНОВЛЕН")
+
+        # Проверка docker-compose.yml
+        docker_compose_path = self.base_path / "docker-compose.yml"
+        if docker_compose_path.exists():
+            print(f"✓ Docker Compose:  настроен")
+        else:
+            print(f"⚠  Docker Compose:  НЕ НАСТРОЕН")
+
+        # Проверка Nginx конфига
+        nginx_conf_path = self.sites_available / domain
+        if nginx_conf_path.exists():
+            print(f"✓ Nginx конфиг:    создан")
+        else:
+            print(f"⚠  Nginx конфиг:    НЕ СОЗДАН")
+
+        print()
+
+    def validate_mtproto_setup(self, domain, config_data):
+        """Проверяет корректность существующей настройки"""
+        issues = []
+
+        # Проверяем обязательные параметры
+        if not config_data or 'port' not in config_data:
+            issues.append("Порт не настроен в config.py")
+
+        if not config_data or 'secret' not in config_data:
+            issues.append("Секрет не настроен в config.py")
+
+        if not config_data or 'tls_domain' not in config_data:
+            issues.append("TLS домен не настроен в config.py")
+
+        # Проверяем SSL сертификат
+        cert_path = Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
+        if not cert_path.exists():
+            issues.append(f"SSL сертификат не найден для {domain}")
+
+        # Проверяем docker-compose.yml
+        docker_compose_path = self.base_path / "docker-compose.yml"
+        if not docker_compose_path.exists():
+            issues.append("docker-compose.yml не найден")
+
+        # Проверяем Nginx конфиг
+        nginx_conf_path = self.sites_available / domain
+        if not nginx_conf_path.exists():
+            issues.append(f"Nginx конфигурация не найдена для {domain}")
+
+        return issues
+
     def update_stream_conf(self):
         """Обновление stream.conf для MTProto прокси"""
         stream_conf_path = self.remnawave_path / "stream.conf"
@@ -704,6 +886,12 @@ CMD ["python3", "mtprotoproxy.py"]
         print(f"{'='*60}\n")
 
         try:
+            # Проверяем флаг skip_setup (только показать ссылку)
+            if self.config.get('skip_setup'):
+                print("💡 Используется существующая настройка\n")
+                self.print_connection_info()
+                return
+
             # Проверяем наличие Remnawave
             print("🔍 Проверка установки Remnawave...\n")
 
@@ -860,6 +1048,185 @@ def interactive_setup():
         config['xray_reality_domain'] = xray_reality_domain
         print(f"✓ Автоматически определен Xray Reality домен: {xray_reality_domain}\n")
 
+    # Проверяем существующую настройку MTProto
+    existing_mtproto_domain, existing_mtproto_config = temp_setup.detect_existing_mtproto_setup()
+
+    if existing_mtproto_domain:
+        # MTProto уже настроен - показываем текущую конфигурацию
+        temp_setup.show_current_mtproto_config(existing_mtproto_domain, existing_mtproto_config)
+
+        # Проверяем корректность
+        issues = temp_setup.validate_mtproto_setup(existing_mtproto_domain, existing_mtproto_config)
+
+        if issues:
+            print("⚠️  ОБНАРУЖЕНЫ ПРОБЛЕМЫ:")
+            for i, issue in enumerate(issues, 1):
+                print(f"   {i}. {issue}")
+            print()
+        else:
+            print("✅ Настройка выглядит корректной!\n")
+
+        # Предлагаем варианты действий
+        print("="*60)
+        print("Что вы хотите сделать?")
+        print("="*60)
+        print()
+        print("1) Показать ссылку для подключения (оставить как есть)")
+        print("2) Изменить существующую настройку (реконфигурация)")
+        if issues:
+            print("3) Исправить проблемы (автоматическое исправление)")
+        print("0) Выход")
+        print()
+
+        while True:
+            choice = input("Ваш выбор: ").strip()
+
+            if choice == '1':
+                # Только показать ссылку
+                if not existing_mtproto_config or 'secret' not in existing_mtproto_config:
+                    print("\n✗ Невозможно показать ссылку: секрет не настроен")
+                    print("   Выберите опцию 2 или 3 для настройки\n")
+                    continue
+
+                # Используем существующие данные
+                config['mtproto_domain'] = existing_mtproto_domain
+                config['mtproto_secret'] = existing_mtproto_config.get('secret')
+                config['mtproto_proxy_port'] = existing_mtproto_config.get('port', 8888)
+                config['mtproto_backend_port'] = existing_mtproto_config.get('backend_port', 10443)
+                config['tls_domain'] = existing_mtproto_config.get('tls_domain', 'www.google.com')
+                if existing_mtproto_config.get('ad_tag'):
+                    config['ad_tag'] = existing_mtproto_config['ad_tag']
+                config['skip_setup'] = True  # Флаг что ничего не делаем, только показываем ссылку
+                return config
+
+            elif choice == '2':
+                # Полная реконфигурация
+                print("\n" + "="*60)
+                print("РЕКОНФИГУРАЦИЯ MTPROTO")
+                print("="*60 + "\n")
+
+                # Предлагаем текущий домен по умолчанию
+                print(f"💡 Текущий домен: {existing_mtproto_domain}")
+                new_domain = input(f"Новый домен [{existing_mtproto_domain}]: ").strip()
+
+                if new_domain:
+                    # Проверяем новый домен
+                    while not temp_setup.validate_domain(new_domain):
+                        print("✗ Некорректный домен. Попробуйте снова.")
+                        new_domain = input(f"Новый домен [{existing_mtproto_domain}]: ").strip()
+                        if not new_domain:
+                            new_domain = existing_mtproto_domain
+                            break
+                    config['mtproto_domain'] = new_domain
+                else:
+                    config['mtproto_domain'] = existing_mtproto_domain
+
+                # Остальные параметры спрашиваем с текущими значениями
+                current_port = existing_mtproto_config.get('port', 8888) if existing_mtproto_config else 8888
+                port_input = input(f"Порт для MTProto прокси [{current_port}]: ").strip()
+                config['mtproto_proxy_port'] = int(port_input) if port_input else current_port
+
+                current_backend = existing_mtproto_config.get('backend_port', 10443) if existing_mtproto_config else 10443
+                backend_input = input(f"Backend порт для Nginx [{current_backend}]: ").strip()
+                config['mtproto_backend_port'] = int(backend_input) if backend_input else current_backend
+
+                current_tls = existing_mtproto_config.get('tls_domain', 'www.google.com') if existing_mtproto_config else 'www.google.com'
+                tls_input = input(f"Домен для TLS маскировки [{current_tls}]: ").strip()
+                config['tls_domain'] = tls_input if tls_input else current_tls
+
+                # Секрет
+                if existing_mtproto_config and 'secret' in existing_mtproto_config:
+                    print(f"💡 Текущий секрет: {existing_mtproto_config['secret']}")
+                    change_secret = input("Изменить секрет? (y/n) [n]: ").strip().lower()
+                    if change_secret == 'y':
+                        generate = input("Сгенерировать новый секрет? (y/n) [y]: ").strip().lower()
+                        if generate != 'n':
+                            config['mtproto_secret'] = temp_setup.generate_secret()
+                        else:
+                            secret = input("Введите секрет (32 hex символа): ").strip()
+                            config['mtproto_secret'] = secret
+                    else:
+                        config['mtproto_secret'] = existing_mtproto_config['secret']
+                else:
+                    generate = input("Сгенерировать новый секрет? (y/n) [y]: ").strip().lower()
+                    if generate != 'n':
+                        config['mtproto_secret'] = temp_setup.generate_secret()
+                    else:
+                        secret = input("Введите секрет (32 hex символа): ").strip()
+                        config['mtproto_secret'] = secret
+
+                # AD Tag
+                current_ad = existing_mtproto_config.get('ad_tag', '') if existing_mtproto_config else ''
+                if current_ad:
+                    print(f"💡 Текущий AD Tag: {current_ad}")
+                ad_input = input(f"AD Tag от @MTProxybot [{current_ad or 'оставьте пустым'}]: ").strip()
+                if ad_input or current_ad:
+                    config['ad_tag'] = ad_input if ad_input else current_ad
+
+                return config
+
+            elif choice == '3' and issues:
+                # Исправление проблем
+                print("\n" + "="*60)
+                print("ИСПРАВЛЕНИЕ ПРОБЛЕМ")
+                print("="*60 + "\n")
+
+                # Используем существующий домен
+                config['mtproto_domain'] = existing_mtproto_domain
+                print(f"✓ Домен: {existing_mtproto_domain}")
+
+                # Недостающие данные спрашиваем
+                if not existing_mtproto_config or 'port' not in existing_mtproto_config:
+                    port_input = input("Порт для MTProto прокси [8888]: ").strip()
+                    config['mtproto_proxy_port'] = int(port_input) if port_input else 8888
+                else:
+                    config['mtproto_proxy_port'] = existing_mtproto_config['port']
+                    print(f"✓ Порт (прокси): {config['mtproto_proxy_port']}")
+
+                # Backend порт
+                if not existing_mtproto_config or 'backend_port' not in existing_mtproto_config:
+                    backend_input = input("Backend порт для Nginx [10443]: ").strip()
+                    config['mtproto_backend_port'] = int(backend_input) if backend_input else 10443
+                else:
+                    config['mtproto_backend_port'] = existing_mtproto_config['backend_port']
+                    print(f"✓ Порт (backend): {config['mtproto_backend_port']}")
+
+                if not existing_mtproto_config or 'secret' not in existing_mtproto_config:
+                    generate = input("Сгенерировать новый секрет? (y/n) [y]: ").strip().lower()
+                    if generate != 'n':
+                        config['mtproto_secret'] = temp_setup.generate_secret()
+                    else:
+                        secret = input("Введите секрет (32 hex символа): ").strip()
+                        config['mtproto_secret'] = secret
+                else:
+                    config['mtproto_secret'] = existing_mtproto_config['secret']
+                    print(f"✓ Секрет: {config['mtproto_secret']}")
+
+                if not existing_mtproto_config or 'tls_domain' not in existing_mtproto_config:
+                    tls = input("Домен для TLS маскировки [www.google.com]: ").strip()
+                    config['tls_domain'] = tls if tls else "www.google.com"
+                else:
+                    config['tls_domain'] = existing_mtproto_config['tls_domain']
+                    print(f"✓ TLS домен: {config['tls_domain']}")
+
+                # AD Tag (опционально)
+                if existing_mtproto_config and 'ad_tag' in existing_mtproto_config and existing_mtproto_config['ad_tag']:
+                    config['ad_tag'] = existing_mtproto_config['ad_tag']
+                    print(f"✓ AD Tag: {config['ad_tag']}")
+
+                return config
+
+            elif choice == '0':
+                print("Выход...")
+                sys.exit(0)
+
+            else:
+                print("✗ Неверный выбор. Попробуйте снова.\n")
+                continue
+
+    # Новая установка - существующего MTProto нет
+    print("💡 MTProto Proxy еще не настроен. Начинаем новую установку.\n")
+
     # MTProto домен
     while True:
         mtproto_domain = input("Введите домен для MTProto прокси (например, proxy.example.com): ").strip()
@@ -878,11 +1245,11 @@ def interactive_setup():
 
     mtproto_backend_port = input("Backend порт для Nginx [10443]: ").strip()
     config['mtproto_backend_port'] = int(mtproto_backend_port) if mtproto_backend_port else 10443
-    
+
     # TLS домен для маскировки
     tls_domain = input("Домен для TLS маскировки [www.google.com]: ").strip()
     config['tls_domain'] = tls_domain if tls_domain else "www.google.com"
-    
+
     # Секрет
     generate_secret = input("Сгенерировать новый секрет? (y/n) [y]: ").strip().lower()
     if generate_secret != 'n':
@@ -891,12 +1258,12 @@ def interactive_setup():
     else:
         secret = input("Введите секрет (32 hex символа): ").strip()
         config['mtproto_secret'] = secret
-    
+
     # AD TAG
     ad_tag = input("AD Tag от @MTProxybot (оставьте пустым если нет): ").strip()
     if ad_tag:
         config['ad_tag'] = ad_tag
-    
+
     return config
 
 
