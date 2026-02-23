@@ -19,7 +19,46 @@ class MTProtoNginxSetup:
         # Путь к рабочей директории remnanode
         self.remnawave_path = Path("/opt/remnanode")
         self.sites_available = self.remnawave_path / "sites-available"
-        
+
+        # Определяем какую версию docker-compose использовать
+        self.docker_compose_cmd = self._detect_docker_compose()
+
+    def _detect_docker_compose(self):
+        """Определяет доступную версию docker-compose"""
+        import subprocess
+
+        # Проверяем docker compose (v2 plugin)
+        try:
+            result = subprocess.run(
+                ['docker', 'compose', 'version'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                print("✓ Обнаружен Docker Compose v2 (plugin)")
+                return ['docker', 'compose']
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Проверяем docker-compose (v1 standalone)
+        try:
+            result = subprocess.run(
+                ['docker-compose', 'version'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                print("✓ Обнаружен Docker Compose v1 (standalone)")
+                return ['docker-compose']
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # По умолчанию пытаемся v2
+        print("⚠ Не удалось определить версию Docker Compose, использую docker compose")
+        return ['docker', 'compose']
+
     def validate_domain(self, domain):
         """Проверка корректности домена"""
         pattern = r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
@@ -459,9 +498,19 @@ CMD ["python3", "mtprotoproxy.py"]
         try:
             # Останавливаем контейнеры чтобы освободить порт 80
             print("⏸ Временная остановка контейнеров для освобождения порта 80...")
+
+            # Останавливаем Remnawave (Nginx)
             subprocess.run(
                 ['docker', 'compose', 'down'],
                 cwd=str(self.remnawave_path),
+                check=False,
+                capture_output=True
+            )
+
+            # Останавливаем MTProto если он уже запущен
+            subprocess.run(
+                self.docker_compose_cmd + ['down'],
+                cwd=str(self.base_path),
                 check=False,
                 capture_output=True
             )
@@ -525,18 +574,19 @@ CMD ["python3", "mtprotoproxy.py"]
             print("\n   📦 MTProto Proxy (/opt/MTProto_Proxy/):")
             print("      Остановка...")
             subprocess.run(
-                ['docker-compose', 'down'],
+                self.docker_compose_cmd + ['down'],
                 cwd=str(self.base_path),
                 check=False,
                 capture_output=True
             )
 
             print("      Сборка и запуск...")
-            subprocess.run(
-                ['docker-compose', 'up', '-d', '--build'],
+            result = subprocess.run(
+                self.docker_compose_cmd + ['up', '-d', '--build'],
                 cwd=str(self.base_path),
                 check=True,
-                capture_output=True
+                capture_output=True,
+                text=True
             )
             print("      ✓ Запущен")
 
@@ -560,13 +610,25 @@ CMD ["python3", "mtprotoproxy.py"]
 
         except subprocess.CalledProcessError as e:
             print(f"\n✗ Ошибка при перезапуске контейнеров: {e}")
+
+            # Определяем какая команда использовалась
+            compose_cmd = ' '.join(self.docker_compose_cmd)
+
             print(f"\n⚠ Перезапустите контейнеры вручную:")
             print(f"\n   Remnawave:")
             print(f"   cd {self.remnawave_path}")
             print(f"   docker compose down && docker compose up -d")
             print(f"\n   MTProto Proxy:")
             print(f"   cd {self.base_path}")
-            print(f"   docker-compose down && docker-compose up -d --build")
+            print(f"   {compose_cmd} down && {compose_cmd} up -d --build")
+            return False
+        except FileNotFoundError as e:
+            print(f"\n✗ Docker Compose не найден: {e}")
+            print(f"\n⚠ Установите Docker Compose:")
+            print(f"   sudo apt update && sudo apt install -y docker-compose-plugin")
+            print(f"\n   Или перезапустите контейнеры вручную:")
+            print(f"   cd {self.base_path}")
+            print(f"   docker compose up -d --build  # или docker-compose")
             return False
 
     def print_connection_info(self):
