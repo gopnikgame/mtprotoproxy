@@ -1122,13 +1122,32 @@ def interactive_setup():
                     config['mtproto_domain'] = existing_mtproto_domain
 
                 # Остальные параметры спрашиваем с текущими значениями
+                print()
+                print("=" * 60)
+                print("НАСТРОЙКА ПОРТОВ")
+                print("=" * 60)
+                print()
+                print("💡 Архитектура портов:")
+                print("   Internet:443 → Nginx (SNI) → 127.0.0.1:BACKEND → 127.0.0.1:PROXY")
+                print()
+                print("   • Внешний порт: 443 (для клиентов Telegram)")
+                print("   • Backend порт: порт Nginx конфига для MTProto домена")
+                print("   • Proxy порт: порт MTProto контейнера (должен быть СВОБОДНЫМ!)")
+                print()
+
                 current_port = existing_mtproto_config.get('port', 8888) if existing_mtproto_config else 8888
-                port_input = input(f"Порт для MTProto прокси [{current_port}]: ").strip()
+                port_input = input(f"Proxy порт (MTProto контейнер, свободный) [{current_port}]: ").strip()
                 config['mtproto_proxy_port'] = int(port_input) if port_input else current_port
 
                 current_backend = existing_mtproto_config.get('backend_port', 10443) if existing_mtproto_config else 10443
-                backend_input = input(f"Backend порт для Nginx [{current_backend}]: ").strip()
+                backend_input = input(f"Backend порт (Nginx конфиг) [{current_backend}]: ").strip()
                 config['mtproto_backend_port'] = int(backend_input) if backend_input else current_backend
+
+                print()
+                print("=" * 60)
+                print("НАСТРОЙКА TLS И СЕКРЕТА")
+                print("=" * 60)
+                print()
 
                 current_tls = existing_mtproto_config.get('tls_domain', 'www.google.com') if existing_mtproto_config else 'www.google.com'
                 tls_input = input(f"Домен для TLS маскировки [{current_tls}]: ").strip()
@@ -1174,10 +1193,12 @@ def interactive_setup():
                 # Используем существующий домен
                 config['mtproto_domain'] = existing_mtproto_domain
                 print(f"✓ Домен: {existing_mtproto_domain}")
+                print()
 
                 # Недостающие данные спрашиваем
                 if not existing_mtproto_config or 'port' not in existing_mtproto_config:
-                    port_input = input("Порт для MTProto прокси [8888]: ").strip()
+                    print("💡 Proxy порт - локальный порт MTProto контейнера (НЕ 443!)")
+                    port_input = input("Proxy порт (свободный, например 8888) [8888]: ").strip()
                     config['mtproto_proxy_port'] = int(port_input) if port_input else 8888
                 else:
                     config['mtproto_proxy_port'] = existing_mtproto_config['port']
@@ -1239,12 +1260,32 @@ def interactive_setup():
     print("\n💡 Существующие домены будут автоматически сохранены из текущей конфигурации")
     print("   Нет необходимости вводить их повторно\n")
 
-    # Порты
-    mtproto_proxy_port = input("Порт для MTProto прокси [8888]: ").strip()
+    # Порты с пояснениями
+    print("=" * 60)
+    print("НАСТРОЙКА ПОРТОВ")
+    print("=" * 60)
+    print()
+    print("💡 Архитектура портов:")
+    print("   Internet:443 → Nginx (SNI) → 127.0.0.1:BACKEND → 127.0.0.1:PROXY")
+    print()
+    print("   • Внешний порт: 443 (для клиентов Telegram)")
+    print("   • Backend порт: порт Nginx конфига для MTProto домена")
+    print("   • Proxy порт: порт MTProto контейнера (должен быть СВОБОДНЫМ!)")
+    print()
+    print("⚠️  ВАЖНО: Proxy порт НЕ должен быть 443 (он уже занят Nginx)!")
+    print()
+
+    mtproto_proxy_port = input("Proxy порт (MTProto контейнер, свободный) [8888]: ").strip()
     config['mtproto_proxy_port'] = int(mtproto_proxy_port) if mtproto_proxy_port else 8888
 
-    mtproto_backend_port = input("Backend порт для Nginx [10443]: ").strip()
+    mtproto_backend_port = input("Backend порт (Nginx конфиг) [10443]: ").strip()
     config['mtproto_backend_port'] = int(mtproto_backend_port) if mtproto_backend_port else 10443
+
+    print()
+    print("=" * 60)
+    print("НАСТРОЙКА TLS И СЕКРЕТА")
+    print("=" * 60)
+    print()
 
     # TLS домен для маскировки
     tls_domain = input("Домен для TLS маскировки [www.google.com]: ").strip()
