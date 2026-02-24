@@ -40,7 +40,44 @@ echo "   Прямое TCP проксирование: 443 → stream → 8888"
 echo "   БЕЗ промежуточного HTTP backend!"
 echo
 
-# Бэкап
+# Проверяем config.py
+CONFIG_PY="/opt/MTProto_Proxy/config.py"
+
+if [ ! -f "$CONFIG_PY" ]; then
+    print_error "config.py не найден: $CONFIG_PY"
+    exit 1
+fi
+
+# Проверяем порт и хост
+CURRENT_PORT=$(grep "^PORT = " "$CONFIG_PY" | sed 's/PORT = //')
+CURRENT_HOST=$(grep "^HOST = " "$CONFIG_PY" | sed 's/HOST = "\(.*\)"/\1/')
+
+if [ "$CURRENT_PORT" != "8888" ] || [ "$CURRENT_HOST" == "0.0.0.0" ]; then
+    print_error "ПРОБЛЕМА в config.py:"
+    echo "   Текущий PORT: $CURRENT_PORT (должен быть 8888)"
+    echo "   Текущий HOST: $CURRENT_HOST (должен быть 127.0.0.1)"
+    echo
+    print_warning "Исправляем config.py..."
+
+    cp "$CONFIG_PY" "$CONFIG_PY.before_fix"
+
+    # Исправляем PORT
+    sed -i 's/^PORT = .*/PORT = 8888/' "$CONFIG_PY"
+
+    # Исправляем или добавляем HOST
+    if grep -q "^HOST = " "$CONFIG_PY"; then
+        sed -i 's/^HOST = .*/HOST = "127.0.0.1"/' "$CONFIG_PY"
+    else
+        sed -i '/^PORT = /a HOST = "127.0.0.1"' "$CONFIG_PY"
+    fi
+
+    print_success "config.py исправлен:"
+    echo "   PORT = 8888"
+    echo "   HOST = '127.0.0.1'"
+    echo
+fi
+
+# Бэкап stream.conf
 cp "$STREAM_CONF" "$STREAM_CONF.before_mtproto_direct"
 print_success "Backup: $STREAM_CONF.before_mtproto_direct"
 echo
