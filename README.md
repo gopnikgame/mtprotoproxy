@@ -143,7 +143,25 @@ MTProto
 MTProto setup       # Автоматическая настройка
 MTProto start       # Запустить контейнеры
 MTProto cert        # Получить SSL сертификат
+MTProto diagnose    # Запустить диагностику
 MTProto renew-certs # Обновить сертификаты
+```
+
+### Диагностика
+
+```bash
+# Полная диагностика на сервере
+cd /opt/MTProto_Proxy
+sudo bash diagnose_mtproto.sh
+
+# Проверка с внешнего сервера
+bash check_mtproto_external.sh russia3-t.vline.online
+
+# Быстрая проверка портов
+sudo ss -tulpn | grep -E ':443|:8888|:10443'
+
+# Проверка статистики
+docker logs --tail 10 mtprotoproxy | grep "Stats"
 ```
 
 ### Через Docker напрямую
@@ -196,41 +214,108 @@ docker ps | grep -E "mtprotoproxy|remnawave"
 
 ## 🆘 Решение проблем
 
-**Прокси не запускается:**
+### Быстрая диагностика
+
 ```bash
-# Проверить логи
-docker logs mtprotoproxy
-
-# Проверить порты
-netstat -tulpn | grep -E "443|8888|10443"
-```
-
-**Не получается SSL сертификат:**
-```bash
-# Проверить DNS
-dig +short ваш-домен.com
-
-# Получить вручную
-sudo certbot certonly --standalone -d ваш-домен.com
-cd /opt/remnanode && docker compose up -d
-```
-
-**Контейнеры не стартуют:**
-```bash
-# MTProto Proxy
+# Полная диагностика на сервере
 cd /opt/MTProto_Proxy
-docker-compose down
-docker-compose up -d --build
+sudo bash diagnose_mtproto.sh
 
-# Remnawave
-cd /opt/remnanode
-docker compose down
-docker compose up -d
+# Показать правильную ссылку
+sudo bash diagnose_mtproto.sh | grep -A3 "ССЫЛКА ДЛЯ ПОДКЛЮЧЕНИЯ"
 ```
+
+### ✅ HTTP 400 - это УСПЕХ!
+
+Если `curl -v https://your-domain.com` возвращает **HTTP 400 Bad Request** - всё работает правильно!
+
+```
+< HTTP/2 400 
+< server: nginx
+<html>
+<head><title>400 Bad Request</title></head>
+```
+
+**Почему это хорошо:**
+- ✅ Порт 443 доступен
+- ✅ TLS работает
+- ✅ Nginx работает
+- ✅ MTProto отвечает (хоть и ошибкой на HTTP)
+
+**MTProto ожидает специальный протокол, не HTTP!**  
+Подробнее: [SUCCESS_HTTP_400_IS_OK.md](SUCCESS_HTTP_400_IS_OK.md)
+
+### Типичные проблемы
+
+**Прокси не подключается:**
+```bash
+# 1. Проверить firewall
+sudo ufw allow 443/tcp && sudo ufw reload
+
+# 2. Проверить DNS (с вашего устройства)
+nslookup your-domain.com
+
+# 3. Проверить логи
+docker logs --tail 30 mtprotoproxy
+
+# 4. Попробовать с мобильного интернета
+```
+
+**Порты заняты:**
+```bash
+# Проверить что использует порт
+sudo ss -tulpn | grep -E ':443|:8888|:10443'
+
+# Остановить и перезапустить
+cd /opt/MTProto_Proxy && sudo docker compose down
+cd /opt/remnanode && sudo docker compose down
+cd /opt/remnanode && sudo docker compose up -d
+cd /opt/MTProto_Proxy && sudo docker compose up -d --build
+```
+
+**SSL сертификат не получается:**
+```bash
+# Остановить контейнеры (освободить порт 80)
+cd /opt/remnanode && sudo docker compose down
+cd /opt/MTProto_Proxy && sudo docker compose down
+
+# Получить сертификат
+sudo certbot certonly --standalone -d your-domain.com
+
+# Запустить контейнеры
+cd /opt/remnanode && sudo docker compose up -d
+cd /opt/MTProto_Proxy && sudo docker compose up -d
+```
+
+### Проверка с внешнего сервера
+
+```bash
+# Скачать скрипт проверки
+wget https://raw.githubusercontent.com/gopnikgame/mtprotoproxy/master/check_mtproto_external.sh
+
+# Запустить
+bash check_mtproto_external.sh your-domain.com
+
+# Или вручную
+curl -v https://your-domain.com  # Должен вернуть HTTP 400 (это нормально!)
+telnet your-domain.com 443        # Должен подключиться
+```
+
+### Документация по диагностике
+
+- **[FAQ.md](FAQ.md)** - Часто задаваемые вопросы ⭐
+- **[QUICK_START.md](QUICK_START.md)** - Быстрый старт
+- **[DIAGNOSIS_SUCCESS.md](DIAGNOSIS_SUCCESS.md)** - Успешная настройка
+- **[SUCCESS_HTTP_400_IS_OK.md](SUCCESS_HTTP_400_IS_OK.md)** - Почему HTTP 400 = успех
+- **[SECRET_EXPLANATION.md](SECRET_EXPLANATION.md)** - Почему секреты разные
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Полная диагностика
+- **[NEXT_STEPS.md](NEXT_STEPS.md)** - Следующие шаги
+- **[PORT_CONFLICT_FIX.md](PORT_CONFLICT_FIX.md)** - Решение конфликта портов
 
 ## 🆘 Поддержка
 
 - **GitHub Issues**: https://github.com/gopnikgame/mtprotoproxy/issues
+- **FAQ**: См. [FAQ.md](FAQ.md) для ответов на частые вопросы
 - **Upstream**: https://github.com/alexbers/mtprotoproxy
 
 ## 📚 Дополнительная документация
