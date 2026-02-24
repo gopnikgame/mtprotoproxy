@@ -450,6 +450,40 @@ restore_backup() {
     echo
 }
 
+# Запуск диагностики
+run_diagnostics() {
+    print_header "Диагностика MTProto Proxy"
+
+    if [ ! -f "$INSTALL_DIR/diagnose_mtproto.sh" ]; then
+        print_error "Скрипт диагностики не найден"
+        print_warning "Скачать из репозитория? (y/n)"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            wget -q -O "$INSTALL_DIR/diagnose_mtproto.sh" \
+                "https://raw.githubusercontent.com/gopnikgame/mtprotoproxy/master/diagnose_mtproto.sh"
+            chmod +x "$INSTALL_DIR/diagnose_mtproto.sh"
+            print_success "Скрипт диагностики скачан"
+        else
+            return
+        fi
+    fi
+
+    cd "$INSTALL_DIR" || exit 1
+
+    if check_root; then
+        bash diagnose_mtproto.sh
+    else
+        print_warning "Для полной диагностики требуются права root"
+        print_warning "Запустить с sudo? (y/n)"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            sudo bash diagnose_mtproto.sh
+        else
+            print_error "Диагностика отменена"
+        fi
+    fi
+}
+
 # Главное меню
 show_menu() {
     print_header "MTProto Proxy - Управление"
@@ -465,10 +499,13 @@ show_menu() {
     echo "  6) Проверить статус"
     echo "  7) Перезапустить сервис"
     echo ""
+    echo "Диагностика:"
+    echo "  8) Запустить диагностику (проверка конфигурации, портов, firewall)"
+    echo ""
     echo "Дополнительно:"
-    echo "  8) Показать ссылку для подключения"
-    echo "  9) Обновить SSL сертификаты"
-    echo "  10) Восстановить из резервных копий"
+    echo "  9) Показать ссылку для подключения"
+    echo "  10) Обновить SSL сертификаты"
+    echo "  11) Восстановить из резервных копий"
     echo ""
     echo "  0) Выход"
     echo
@@ -490,13 +527,16 @@ main() {
     elif [ "$1" == "start" ]; then
         start_containers
         exit 0
+    elif [ "$1" == "diagnose" ]; then
+        run_diagnostics
+        exit 0
     fi
-    
+
     while true; do
         show_menu
         read -r choice
         echo
-        
+
         case $choice in
             1) install_dependencies ;;
             2) run_setup ;;
@@ -505,13 +545,14 @@ main() {
             5) view_logs ;;
             6) check_status ;;
             7) restart_service ;;
-            8) show_proxy_link ;;
-            9) renew_certs ;;
-            10) restore_backup ;;
+            8) run_diagnostics ;;
+            9) show_proxy_link ;;
+            10) renew_certs ;;
+            11) restore_backup ;;
             0) print_success "До свидания!"; exit 0 ;;
             *) print_error "Неверный выбор" ;;
         esac
-        
+
         echo
         read -p "Нажмите Enter для продолжения..."
         clear
